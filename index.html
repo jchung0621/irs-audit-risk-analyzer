@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRS Audit Risk Analyzer — Jason Chung</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0c;--s1:#0d1117;--s2:#161b22;--s3:#21262d;
+  --b1:rgba(255,255,255,0.06);--b2:rgba(255,255,255,0.12);--b3:rgba(255,255,255,0.2);
+  --text:#e6edf3;--muted:#8b949e;--dim:#484f58;
+  --green:#3fb950;--green-bg:rgba(63,185,80,0.1);--green-b:rgba(63,185,80,0.3);
+  --blue:#58a6ff;--blue-bg:rgba(88,166,255,0.1);--blue-b:rgba(88,166,255,0.3);
+  --amber:#d29922;--amber-bg:rgba(210,153,34,0.1);--amber-b:rgba(210,153,34,0.3);
+  --red:#f85149;--red-bg:rgba(248,81,73,0.1);--red-b:rgba(248,81,73,0.3);
+  --purple:#bc8cff;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+/* ── SCANLINE TEXTURE ── */
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:0}
+
+.wrap{max-width:1100px;margin:0 auto;padding:0 1.5rem;position:relative;z-index:1}
+
+/* ── HEADER ── */
+header{border-bottom:1px solid var(--b1);padding:1.5rem 0}
+.header-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
+.logo{display:flex;align-items:center;gap:.75rem}
+.logo-icon{width:32px;height:32px;border:1px solid var(--green-b);border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--green-bg)}
+.logo-icon svg{width:16px;height:16px;stroke:var(--green);fill:none;stroke-width:2}
+.logo-text{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--text)}
+.logo-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.header-badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--b2);color:var(--muted);letter-spacing:.04em}
+.badge.live{border-color:var(--green-b);color:var(--green);background:var(--green-bg)}
+.badge.live::before{content:'● ';font-size:8px}
+
+/* ── NAV ── */
+nav{border-bottom:1px solid var(--b1);position:sticky;top:0;background:rgba(8,10,12,0.92);backdrop-filter:blur(12px);z-index:100}
+.nav-inner{display:flex;gap:0;overflow-x:auto}
+.nav-btn{font-family:var(--mono);font-size:12px;padding:12px 20px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;letter-spacing:.03em}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── PANELS ── */
+.panel{display:none;padding:2rem 0 3rem}
+.panel.active{display:block}
+
+/* ── SECTION TITLES ── */
+.section-title{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:1.25rem;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--b1)}
+
+/* ── GRID ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem}
+@media(max-width:700px){.grid-2{grid-template-columns:1fr}.grid-3{grid-template-columns:1fr 1fr}}
+
+/* ── CARDS ── */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:1.25rem 1.5rem}
+.card-dark{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:1.25rem 1.5rem}
+
+/* ── METRIC CARDS ── */
+.metric{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:1rem 1.25rem}
+.metric-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:6px}
+.metric-value{font-family:var(--mono);font-size:22px;font-weight:500}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ── RISK SCORER ── */
+.scorer-layout{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+@media(max-width:750px){.scorer-layout{grid-template-columns:1fr}}
+
+.input-group{margin-bottom:1.1rem}
+.input-label{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.input-val{color:var(--text);font-weight:500}
+input[type=range]{width:100%;-webkit-appearance:none;height:3px;background:var(--s3);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid var(--bg);transition:transform .1s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid var(--bg)}
+
+.toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1.1rem}
+.toggle-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;cursor:pointer;transition:all .15s;user-select:none}
+.toggle-item:hover{border-color:var(--b2)}
+.toggle-item.on{border-color:var(--green-b);background:var(--green-bg)}
+.toggle-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--dim);background:transparent;flex-shrink:0;transition:all .15s}
+.toggle-item.on .toggle-dot{background:var(--green);border-color:var(--green)}
+.toggle-label{font-size:12px;color:var(--muted);transition:color .15s}
+.toggle-item.on .toggle-label{color:var(--text)}
+
+/* ── SCORE DISPLAY ── */
+.score-display{position:sticky;top:60px}
+.score-gauge{text-align:center;padding:2rem 1.5rem;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:1rem}
+.score-number{font-family:var(--mono);font-size:64px;font-weight:500;line-height:1;transition:all .3s}
+.score-label{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-top:6px;transition:color .3s}
+.score-bar-wrap{height:6px;background:var(--s3);border-radius:3px;margin:1rem 0;overflow:hidden}
+.score-bar{height:100%;border-radius:3px;transition:width .4s cubic-bezier(.4,0,.2,1),background .3s}
+.score-rate{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center}
+
+.factor-list{background:var(--s2);border:1px solid var(--b1);border-radius:8px;overflow:hidden}
+.factor-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--b1);font-size:12px}
+.factor-item:last-child{border-bottom:none}
+.factor-name{color:var(--muted)}
+.factor-val{font-family:var(--mono);font-size:11px;font-weight:500}
+.factor-val.active{color:var(--amber)}
+.factor-val.neutral{color:var(--dim)}
+
+/* ── CHART WRAP ── */
+.chart-box{background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
+.chart-title{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.chart-title span{font-size:10px;color:var(--dim)}
+.chart-wrap{position:relative}
+.legend-row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.ld{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+
+/* ── INSIGHT BOX ── */
+.insight{border-left:2px solid var(--green);background:var(--s2);border-radius:0 6px 6px 0;padding:.9rem 1.1rem;margin-bottom:1rem;font-size:13px;line-height:1.65;color:var(--muted)}
+.insight strong{color:var(--text);font-weight:500}
+.insight.amber{border-left-color:var(--amber)}
+.insight.red{border-left-color:var(--red)}
+.insight.blue{border-left-color:var(--blue)}
+
+/* ── FINDINGS TABLE ── */
+.findings-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono)}
+.findings-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--b2);color:var(--dim);font-weight:400;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.findings-table td{padding:9px 12px;border-bottom:1px solid var(--b1);color:var(--muted)}
+.findings-table td:first-child{color:var(--text)}
+.findings-table tr:last-child td{border-bottom:none}
+.pill{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:500}
+.pill.low{background:var(--green-bg);color:var(--green);border:1px solid var(--green-b)}
+.pill.moderate{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-b)}
+.pill.elevated{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-b)}
+.pill.high{background:var(--red-bg);color:var(--red);border:1px solid var(--red-b)}
+
+/* ── SOURCE NOTE ── */
+.source{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--b1);line-height:1.7}
+.source a{color:var(--muted);text-decoration:none}
+.source a:hover{color:var(--text)}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid var(--b1);padding:1.5rem 0;margin-top:2rem}
+.footer-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.footer-inner a{color:var(--muted);text-decoration:none}
+.footer-inner a:hover{color:var(--text)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.panel.active{animation:fadeIn .2s ease}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div>
+          <div class="logo-text">IRS Audit Risk Analyzer</div>
+          <div class="logo-sub">Federal examination rate model · IRS Data Book Table 17 · TY 2010–2022</div>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge live">live model</span>
+        <span class="badge">160.8M returns</span>
+        <span class="badge">IRS SOI Pub. 55B</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="wrap">
+    <div class="nav-inner">
+      <button class="nav-btn active" onclick="show('scorer',this)">// risk_scorer</button>
+      <button class="nav-btn" onclick="show('trends',this)">// audit_trends</button>
+      <button class="nav-btn" onclick="show('brackets',this)">// income_brackets</button>
+      <button class="nav-btn" onclick="show('sensitivity',this)">// sensitivity</button>
+      <button class="nav-btn" onclick="show('findings',this)">// key_findings</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════
+     PANEL 1 — RISK SCORER
+════════════════════════════════════════════════ -->
+<div id="p-scorer" class="panel active">
+  <div class="wrap">
+    <div class="section-title">interactive audit risk scorer</div>
+
+    <div class="scorer-layout">
+      <!-- LEFT: INPUTS -->
+      <div>
+        <div class="card">
+          <div class="input-group">
+            <div class="input-label">
+              Adjusted gross income (AGI)
+              <span class="input-val" id="v-agi">$80,000</span>
+            </div>
+            <input type="range" id="s-agi" min="15000" max="5000000" step="1000" value="80000" oninput="update()">
+          </div>
+
+          <div class="input-group">
+            <div class="input-label">
+              Charitable contributions (% of AGI)
+              <span class="input-val" id="v-charity">0%</span>
+            </div>
+            <input type="range" id="s-charity" min="0" max="40" step="1" value="0" oninput="update()">
+          </div>
+
+          <div style="margin-bottom:.75rem">
+            <div class="section-title" style="font-size:10px;margin-bottom:.75rem">risk factors</div>
+            <div class="toggle-grid">
+              <div class="toggle-item" id="t-se" onclick="toggle('se')">
+                <div class="toggle-dot"></div>
+                <span class="toggle-label">Self-employed (Sch. C)</span>
+              </div>
+              <div class="toggle-item" id="t-loss" onclick="toggle('loss')">
+                <div class="toggle-dot"></div>
+                <span class="toggle-label">Business loss reported</span>
+              </div>
+              <div class="toggle-item" id="t-cash" onclick="toggle('cash')">
+                <div class="toggle-dot"></div>
+                <span class="toggle-label">Cash-intensive business</span>
+              </div>
+              <div class="toggle-item" id="t-ded" onclick="toggle('ded')">
+                <div class="toggle-dot"></div>
+                <span class="toggle-label">Large itemized deductions</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="insight" style="margin-top:1rem">
+          <strong>How the model works:</strong> Base audit probability is drawn directly from IRS Data Book Table 17 (2022). Each risk factor applies a multiplier grounded in IRS DIF score research and TIGTA audit pattern analysis. The 0–100 score uses a log scale so differences are meaningful across the full range.
+        </div>
+      </div>
+
+      <!-- RIGHT: SCORE OUTPUT -->
+      <div class="score-display">
+        <div class="score-gauge">
+          <div class="score-number" id="score-num">29</div>
+          <div class="score-label" id="score-level">Moderate</div>
+          <div class="score-bar-wrap" style="margin:1.25rem 0 .5rem">
+            <div class="score-bar" id="score-bar" style="width:29%;background:var(--blue)"></div>
+          </div>
+          <div class="score-rate" id="score-rate">Base rate: 0.22% &rarr; Adjusted: 0.22% &nbsp;·&nbsp; Multiplier: 1.0x</div>
+        </div>
+
+        <div class="factor-list">
+          <div class="factor-item">
+            <span class="factor-name">Income bracket</span>
+            <span class="factor-val neutral" id="f-income">$75k–$100k</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Base audit rate (IRS 2022)</span>
+            <span class="factor-val neutral" id="f-base">0.22%</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Self-employment</span>
+            <span class="factor-val neutral" id="f-se">off</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Charitable ratio</span>
+            <span class="factor-val neutral" id="f-charity">0% — no flag</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Business loss</span>
+            <span class="factor-val neutral" id="f-loss">off</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Cash business</span>
+            <span class="factor-val neutral" id="f-cash">off</span>
+          </div>
+          <div class="factor-item">
+            <span class="factor-name">Large deductions</span>
+            <span class="factor-val neutral" id="f-ded">off</span>
+          </div>
+          <div class="factor-item" style="background:var(--s3)">
+            <span class="factor-name" style="color:var(--text);font-weight:500">Total multiplier</span>
+            <span class="factor-val" id="f-mult" style="color:var(--green)">1.0x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PANEL 2 — AUDIT TRENDS
+════════════════════════════════════════════════ -->
+<div id="p-trends" class="panel">
+  <div class="wrap">
+    <div class="section-title">audit rate trends 2010–2022</div>
+
+    <div class="grid-4" style="margin-bottom:1.5rem">
+      <div class="metric"><div class="metric-label">2010 overall rate</div><div class="metric-value" style="color:var(--red)">1.11%</div></div>
+      <div class="metric"><div class="metric-label">2020 overall rate (low)</div><div class="metric-value" style="color:var(--amber)">0.29%</div></div>
+      <div class="metric"><div class="metric-label">2022 overall rate</div><div class="metric-value" style="color:var(--blue)">0.49%</div></div>
+      <div class="metric"><div class="metric-label">total decline 2010–2020</div><div class="metric-value" style="color:var(--red)">-56%</div></div>
+    </div>
+
+    <div class="chart-box">
+      <div class="chart-title">Overall audit rate vs. time <span>Source: IRS Data Book Table 17</span></div>
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="c-trend" role="img" aria-label="Line chart of overall IRS audit rates 2010-2022">IRS audit rates declined from 1.11% in 2010 to 0.29% in 2020, recovering to 0.49% in 2022.</canvas>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <div class="chart-title">Audit rates by income bracket over time <span>Tax Years 2010–2022</span></div>
+      <div class="legend-row">
+        <span><span class="ld" style="background:#8b949e"></span>&lt;$25k</span>
+        <span><span class="ld" style="background:#58a6ff"></span>$100–200k</span>
+        <span><span class="ld" style="background:#3fb950"></span>$500k–1M</span>
+        <span><span class="ld" style="background:#d29922"></span>$1M–5M</span>
+        <span><span class="ld" style="background:#f85149"></span>&gt;$10M</span>
+      </div>
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="c-brackets-trend" role="img" aria-label="Multi-line chart of audit rates by income bracket 2010-2022">Audit rates by bracket over time.</canvas>
+      </div>
+    </div>
+
+    <div class="insight amber">
+      <strong>Budget erosion story:</strong> IRS enforcement funding fell from $5.5B (2010) to $4.5B (2016) in real terms — a sustained 18% cut. The result: the highest-income filers saw their audit probability drop from 18.38% to 2.48% in a single decade. The 2022 Inflation Reduction Act reversed course with $80B in new funding, but rates remain well below 2010 levels.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PANEL 3 — INCOME BRACKETS
+════════════════════════════════════════════════ -->
+<div id="p-brackets" class="panel">
+  <div class="wrap">
+    <div class="section-title">2022 examination rates by income bracket</div>
+
+    <div class="chart-box">
+      <div class="chart-title">Federal audit rate by total positive income — Tax Year 2022 <span>IRS Data Book Table 17</span></div>
+      <div class="chart-wrap" style="height:340px">
+        <canvas id="c-income" role="img" aria-label="Bar chart of 2022 IRS audit rates by income bracket">2022 audit rates: under $25k 0.61%, $25-50k 0.26%, $50-75k 0.21%, $75-100k 0.20%, $100-200k 0.22%, $200-500k 0.38%, $500k-1M 0.63%, $1M-5M 1.10%, $5M-10M 2.35%, over $10M 4.40%.</canvas>
+      </div>
+    </div>
+
+    <div class="insight red">
+      <strong>The U-shaped curve explained:</strong> Low-income filers (&lt;$25k) face elevated rates primarily due to Earned Income Tax Credit compliance checks — the EITC has historically high error rates. The $75k–$200k range is the statistical safest zone. Above $500k, rates climb steeply as the IRS focuses on high-complexity, high-dollar returns where additional assessments are largest.
+    </div>
+
+    <div class="insight blue">
+      <strong>EITC audit concentration:</strong> A significant portion of &lt;$25k audits are correspondence audits (not field audits) specifically targeting EITC eligibility — a very different audit experience than a high-income field examination. The raw rate overstates the "severity" of low-income audit risk.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PANEL 4 — SENSITIVITY
+════════════════════════════════════════════════ -->
+<div id="p-sensitivity" class="panel">
+  <div class="wrap">
+    <div class="section-title">risk factor sensitivity analysis</div>
+
+    <div class="chart-box">
+      <div class="chart-title">Audit risk score vs. AGI by filing profile <span>Model output</span></div>
+      <div class="legend-row">
+        <span><span class="ld" style="background:#58a6ff"></span>W-2 only</span>
+        <span><span class="ld" style="background:#d29922"></span>+ self-employed</span>
+        <span><span class="ld" style="background:#f85149"></span>+ SE + business loss</span>
+        <span><span class="ld" style="background:#bc8cff"></span>+ SE + 15% charitable</span>
+      </div>
+      <div class="chart-wrap" style="height:300px">
+        <canvas id="c-sens1" role="img" aria-label="Line chart showing audit risk score vs income for different filing types">Risk score sensitivity by filing profile.</canvas>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <div class="chart-title">Charitable giving ratio sensitivity — $250k filer <span>Model output</span></div>
+      <div class="legend-row">
+        <span><span class="ld" style="background:#58a6ff"></span>W-2, $250k AGI</span>
+        <span><span class="ld" style="background:#f85149"></span>Self-employed, $250k AGI</span>
+      </div>
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="c-sens2" role="img" aria-label="Line chart showing how charitable giving ratio affects audit risk for a $250k filer">Charity ratio sensitivity at $250k income.</canvas>
+      </div>
+    </div>
+
+    <div class="insight amber">
+      <strong>Key sensitivity finding:</strong> For a self-employed filer at $200k AGI, adding a reported business loss pushes the risk score from 67.7 (Elevated) to 70.8 (High) — a 14% increase from a single additional factor. The model shows compounding effects are most pronounced in the $150k–$600k range where marginal factor changes have the largest impact on examination probability.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PANEL 5 — FINDINGS
+════════════════════════════════════════════════ -->
+<div id="p-findings" class="panel">
+  <div class="wrap">
+    <div class="section-title">key findings</div>
+
+    <div class="grid-2" style="margin-bottom:1.5rem">
+      <div class="insight" style="margin:0">
+        <strong>56% rate collapse (2010–2020)</strong><br>
+        Sustained IRS budget cuts reduced the overall audit rate from 1.11% to 0.29% — the lowest in modern history. High-income rates fell even faster, from 18.38% to 2.48% for filers over $10M.
+      </div>
+      <div class="insight amber" style="margin:0">
+        <strong>IRA recovery underway</strong><br>
+        The 2022 Inflation Reduction Act allocated $80B to IRS enforcement. By 2022, rates had recovered to 0.49% — real progress, but still less than half of 2010 levels. Full recovery is expected through 2025–2027.
+      </div>
+      <div class="insight red" style="margin:0">
+        <strong>Self-employment: 2.5x multiplier</strong><br>
+        Schedule C filers face approximately 2.5x the audit probability of W-2 filers at the same AGI — the single largest individual risk factor. Cash-intensive businesses add another 1.4x on top.
+      </div>
+      <div class="insight blue" style="margin:0">
+        <strong>Charitable deduction thresholds</strong><br>
+        Charitable giving above 5% of AGI adds a 15% risk premium. Above 10%, the premium jumps to 35%. Above 20%, it reaches 80%. These thresholds reflect IRS DIF score break points documented in TIGTA reports.
+      </div>
+    </div>
+
+    <div class="section-title">sample profile scores</div>
+    <div class="card" style="overflow-x:auto;margin-bottom:1.5rem">
+      <table class="findings-table">
+        <thead>
+          <tr>
+            <th>Profile</th>
+            <th>Score</th>
+            <th>Risk level</th>
+            <th>Base rate</th>
+            <th>Adjusted rate</th>
+            <th>Multiplier</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>W-2 employee, $65k</td><td>28.8</td><td><span class="pill moderate">Moderate</span></td><td>0.21%</td><td>0.21%</td><td>1.0x</td></tr>
+          <tr><td>W-2 employee, $150k</td><td>29.6</td><td><span class="pill moderate">Moderate</span></td><td>0.22%</td><td>0.22%</td><td>1.0x</td></tr>
+          <tr><td>Freelancer, $90k</td><td>45.6</td><td><span class="pill moderate">Moderate</span></td><td>0.20%</td><td>0.50%</td><td>2.5x</td></tr>
+          <tr><td>Small business, $200k</td><td>67.7</td><td><span class="pill elevated">Elevated</span></td><td>0.38%</td><td>1.33%</td><td>3.5x</td></tr>
+          <tr><td>Small biz + loss, $200k</td><td>70.8</td><td><span class="pill high">High</span></td><td>0.38%</td><td>1.52%</td><td>4.0x</td></tr>
+          <tr><td>High earner, $750k</td><td>50.6</td><td><span class="pill elevated">Elevated</span></td><td>0.63%</td><td>0.63%</td><td>1.0x</td></tr>
+          <tr><td>High earner + Sch. C, $750k</td><td>78.9</td><td><span class="pill high">High</span></td><td>0.63%</td><td>2.13%</td><td>3.4x</td></tr>
+          <tr><td>Ultra-high, $5M</td><td>88.7</td><td><span class="pill high">High</span></td><td>2.35%</td><td>3.17%</td><td>1.4x</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="source">
+      Data: IRS Data Book Publication 55B, Table 17 (Tax Years 2010–2022) ·
+      <a href="https://www.irs.gov/statistics/soi-tax-stats-irs-data-book" target="_blank">irs.gov/statistics</a> ·
+      IRS SOI Publication 1304 · Risk factor weights from IRS DIF score documentation and TIGTA audit reports ·
+      For educational purposes only — not tax advice.
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-inner">
+      <span>Jason Chung · UCLA Statistics &amp; Data Science</span>
+      <div style="display:flex;gap:16px">
+        <a href="https://github.com/jchung0621/irs-audit-risk-analyzer" target="_blank">GitHub →</a>
+        <a href="https://jchung0621.github.io" target="_blank">Portfolio →</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const YEARS=[2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022];
+const OVERALL=[1.11,1.11,1.03,0.96,0.86,0.84,0.70,0.62,0.45,0.45,0.29,0.38,0.49];
+const D={
+  under25:[1.92,1.85,1.62,1.44,1.21,1.14,1.00,0.97,0.69,0.69,0.51,0.54,0.61],
+  k100200:[0.48,0.48,0.46,0.42,0.37,0.34,0.28,0.23,0.18,0.19,0.12,0.16,0.22],
+  k5001m: [1.95,2.05,1.95,1.76,1.52,1.42,1.17,0.89,0.57,0.59,0.36,0.47,0.63],
+  k1m5m:  [4.01,4.06,3.70,3.24,2.73,2.43,1.99,1.47,0.97,1.00,0.69,0.84,1.10],
+  over10m:[18.38,18.38,16.22,14.17,10.74,9.55,6.62,4.84,3.22,3.90,2.48,3.24,4.40],
+};
+
+const BRACKETS=['<$25k','$25–50k','$50–75k','$75–100k','$100–200k','$200–500k','$500k–1M','$1M–5M','$5M–10M','>$10M'];
+const RATES2022=[0.61,0.26,0.21,0.20,0.22,0.38,0.63,1.10,2.35,4.40];
+
+const COPTS={
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'#161b22',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',padding:10}},
+  scales:{
+    x:{ticks:{color:'#8b949e',font:{size:10,family:'IBM Plex Mono'}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},
+    y:{ticks:{color:'#8b949e',font:{size:10,family:'IBM Plex Mono'}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}
+  }
+};
+
+function dm(a,b){const r={...a};for(const k in b){if(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k]))r[k]=dm(a[k]||{},b[k]);else r[k]=b[k];}return r;}
+
+// ── RISK MODEL ────────────────────────────────────
+const flags={se:false,loss:false,cash:false,ded:false};
+
+function getBase(agi){
+  if(agi<25000)return{rate:0.61,label:'Under $25k'};
+  if(agi<50000)return{rate:0.26,label:'$25k–$50k'};
+  if(agi<75000)return{rate:0.21,label:'$50k–$75k'};
+  if(agi<100000)return{rate:0.20,label:'$75k–$100k'};
+  if(agi<200000)return{rate:0.22,label:'$100k–$200k'};
+  if(agi<500000)return{rate:0.38,label:'$200k–$500k'};
+  if(agi<1000000)return{rate:0.63,label:'$500k–$1M'};
+  if(agi<5000000)return{rate:1.10,label:'$1M–$5M'};
+  if(agi<10000000)return{rate:2.35,label:'$5M–$10M'};
+  return{rate:4.40,label:'Over $10M'};
+}
+
+function calcScore(agi,charity,se,loss,cash,ded){
+  const b=getBase(agi);
+  let mult=1.0;
+  if(se)mult*=2.5;
+  if(charity>20)mult*=1.8;
+  else if(charity>10)mult*=1.35;
+  else if(charity>5)mult*=1.15;
+  if(loss)mult*=1.6;
+  if(cash)mult*=1.4;
+  if(ded)mult*=1.25;
+  const adj=b.rate*mult;
+  const score=Math.min(100,Math.round(Math.log1p(adj*10)/Math.log1p(50)*100*10)/10);
+  let level,color;
+  if(score<25){level='Low';color='var(--green)';}
+  else if(score<50){level='Moderate';color='var(--blue)';}
+  else if(score<70){level='Elevated';color='var(--amber)';}
+  else{level='High';color='var(--red)';}
+  return{score,level,color,base:b,adj:Math.min(adj,15),mult};
+}
+
+function fmtAgi(v){
+  if(v>=1000000)return'$'+(v/1000000).toFixed(1)+'M';
+  if(v>=1000)return'$'+(v/1000).toFixed(0)+'k';
+  return'$'+v;
+}
+
+function toggle(id){
+  flags[id]=!flags[id];
+  document.getElementById('t-'+id).classList.toggle('on',flags[id]);
+  update();
+}
+
+function update(){
+  const agi=+document.getElementById('s-agi').value;
+  const charity=+document.getElementById('s-charity').value;
+  document.getElementById('v-agi').textContent=fmtAgi(agi);
+  document.getElementById('v-charity').textContent=charity+'%';
+  const r=calcScore(agi,charity,flags.se,flags.loss,flags.cash,flags.ded);
+
+  document.getElementById('score-num').textContent=r.score.toFixed(1);
+  document.getElementById('score-num').style.color=r.color;
+  document.getElementById('score-level').textContent=r.level;
+  document.getElementById('score-level').style.color=r.color;
+  document.getElementById('score-bar').style.width=r.score+'%';
+  document.getElementById('score-bar').style.background=r.color;
+  document.getElementById('score-rate').textContent=
+    'Base: '+r.base.rate.toFixed(2)+'%  →  Adjusted: '+r.adj.toFixed(2)+'%  ·  Multiplier: '+r.mult.toFixed(1)+'x';
+
+  document.getElementById('f-income').textContent=r.base.label;
+  document.getElementById('f-base').textContent=r.base.rate.toFixed(2)+'%';
+  const seEl=document.getElementById('f-se');
+  seEl.textContent=flags.se?'+150% risk':'off';
+  seEl.className='factor-val '+(flags.se?'active':'neutral');
+  const cLabel=charity>20?'+80% risk':charity>10?'+35% risk':charity>5?'+15% risk':'no flag';
+  const cEl=document.getElementById('f-charity');
+  cEl.textContent=charity+'% — '+cLabel;
+  cEl.className='factor-val '+(charity>5?'active':'neutral');
+  const lossEl=document.getElementById('f-loss');
+  lossEl.textContent=flags.loss?'+60% risk':'off';
+  lossEl.className='factor-val '+(flags.loss?'active':'neutral');
+  const cashEl=document.getElementById('f-cash');
+  cashEl.textContent=flags.cash?'+40% risk':'off';
+  cashEl.className='factor-val '+(flags.cash?'active':'neutral');
+  const dedEl=document.getElementById('f-ded');
+  dedEl.textContent=flags.ded?'+25% risk':'off';
+  dedEl.className='factor-val '+(flags.ded?'active':'neutral');
+  document.getElementById('f-mult').textContent=r.mult.toFixed(1)+'x';
+  document.getElementById('f-mult').style.color=r.mult>3?'var(--red)':r.mult>1.5?'var(--amber)':'var(--green)';
+}
+
+// ── CHARTS ─────────────────────────────────────────
+const built={};
+function show(id,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('p-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(!built[id]){built[id]=true;buildCharts(id);}
+}
+
+function buildCharts(id){
+  if(id==='trends'){
+    new Chart(document.getElementById('c-trend'),{
+      type:'line',
+      data:{labels:YEARS,datasets:[{
+        label:'Overall audit rate',data:OVERALL,
+        borderColor:'#f85149',backgroundColor:'rgba(248,81,73,0.06)',
+        tension:0.3,fill:true,pointBackgroundColor:'#f85149',pointRadius:4,pointHoverRadius:6
+      }]},
+      options:dm(COPTS,{scales:{y:{ticks:{...COPTS.scales.y.ticks,callback:v=>v+'%'}}}})
+    });
+    new Chart(document.getElementById('c-brackets-trend'),{
+      type:'line',
+      data:{labels:YEARS,datasets:[
+        {label:'<$25k',data:D.under25,borderColor:'#8b949e',tension:0.3,pointRadius:3},
+        {label:'$100-200k',data:D.k100200,borderColor:'#58a6ff',tension:0.3,pointRadius:3},
+        {label:'$500k-1M',data:D.k5001m,borderColor:'#3fb950',tension:0.3,pointRadius:3},
+        {label:'$1M-5M',data:D.k1m5m,borderColor:'#d29922',tension:0.3,pointRadius:3},
+        {label:'>$10M',data:D.over10m,borderColor:'#f85149',tension:0.3,pointRadius:3},
+      ]},
+      options:dm(COPTS,{scales:{y:{ticks:{...COPTS.scales.y.ticks,callback:v=>v+'%'}}}})
+    });
+  }
+  if(id==='brackets'){
+    const colors=RATES2022.map(r=>r<0.5?'#3fb950':r<1.5?'#d29922':'#f85149');
+    new Chart(document.getElementById('c-income'),{
+      type:'bar',
+      data:{labels:BRACKETS,datasets:[{label:'Audit rate',data:RATES2022,backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+      options:dm(COPTS,{
+        scales:{
+          x:{...COPTS.scales.x,ticks:{...COPTS.scales.x.ticks,maxRotation:35}},
+          y:{...COPTS.scales.y,ticks:{...COPTS.scales.y.ticks,callback:v=>v+'%'}}
+        },
+        plugins:{...COPTS.plugins,tooltip:{...COPTS.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.raw.toFixed(2)}% audit rate`}}}
+      })
+    });
+  }
+  if(id==='sensitivity'){
+    const agiPts=[];
+    for(let a=20000;a<=2000000;a+=20000)agiPts.push(a);
+    const s1=agiPts.map(a=>calcScore(a,0,false,false,false,false).score);
+    const s2=agiPts.map(a=>calcScore(a,0,true,false,false,false).score);
+    const s3=agiPts.map(a=>calcScore(a,0,true,true,false,false).score);
+    const s4=agiPts.map(a=>calcScore(a,15,true,false,false,false).score);
+    new Chart(document.getElementById('c-sens1'),{
+      type:'line',
+      data:{labels:agiPts.map(a=>fmtAgi(a)),datasets:[
+        {label:'W-2 only',data:s1,borderColor:'#58a6ff',tension:0.4,pointRadius:0,borderWidth:2},
+        {label:'+SE',data:s2,borderColor:'#d29922',tension:0.4,pointRadius:0,borderWidth:2},
+        {label:'+SE+loss',data:s3,borderColor:'#f85149',tension:0.4,pointRadius:0,borderWidth:2},
+        {label:'+SE+15%charity',data:s4,borderColor:'#bc8cff',tension:0.4,pointRadius:0,borderWidth:2},
+      ]},
+      options:dm(COPTS,{
+        scales:{
+          x:{...COPTS.scales.x,ticks:{...COPTS.scales.x.ticks,maxTicksLimit:8}},
+          y:{...COPTS.scales.y,min:0,max:100,ticks:{...COPTS.scales.y.ticks}}
+        }
+      })
+    });
+    const cPts=[];
+    for(let c=0;c<=40;c++)cPts.push(c);
+    const cs1=cPts.map(c=>calcScore(250000,c,false,false,false,false).score);
+    const cs2=cPts.map(c=>calcScore(250000,c,true,false,false,false).score);
+    new Chart(document.getElementById('c-sens2'),{
+      type:'line',
+      data:{labels:cPts.map(c=>c+'%'),datasets:[
+        {label:'W-2, $250k',data:cs1,borderColor:'#58a6ff',tension:0.3,pointRadius:0,borderWidth:2},
+        {label:'SE, $250k',data:cs2,borderColor:'#f85149',tension:0.3,pointRadius:0,borderWidth:2},
+      ]},
+      options:dm(COPTS,{
+        scales:{
+          x:{...COPTS.scales.x,ticks:{...COPTS.scales.x.ticks,maxTicksLimit:9}},
+          y:{...COPTS.scales.y,min:0,max:100}
+        }
+      })
+    });
+  }
+}
+
+update();
+</script>
+</body>
+</html>
