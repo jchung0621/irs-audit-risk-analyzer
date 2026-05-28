@@ -2,7 +2,7 @@
 
 A data-driven audit risk scoring model built on real IRS examination rate data from the IRS Data Book (Publication 55B, Table 17), covering Tax Years 2010–2022 across 160+ million individual returns.
 
-**[Live Dashboard](#)** · **[View Notebook](irs_audit_risk_analyzer.ipynb)**
+**[Live Demo](https://jchung0621.github.io/irs-audit-risk-analyzer/)** · **[View Notebook](irs_audit_risk_analyzer.ipynb)**
 
 ---
 
